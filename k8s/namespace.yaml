@@ -1,0 +1,7 @@
+# Namespace: pokemission
+# Isolates all PokéMission resources into their own logical group.
+# Every other manifest in this directory references this namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pokemission

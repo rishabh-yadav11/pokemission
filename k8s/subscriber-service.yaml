@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subscriber-service
+  namespace: pokemission
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: subscriber-service
+  template:
+    metadata:
+      labels:
+        app: subscriber-service
+    spec:
+      containers:
+        - name: subscriber-service
+          image: <ECR_ACCOUNT>.dkr.ecr.ap-south-1.amazonaws.com/pokemission-subscriber-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: CORS_ORIGINS
+              value: "*"
+          envFrom:
+            - secretRef:
+                name: db-secret
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: subscriber-service
+  namespace: pokemission
+spec:
+  selector:
+    app: subscriber-service
+  ports:
+    - port: 8000
+      targetPort: 8000
