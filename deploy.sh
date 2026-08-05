@@ -41,7 +41,7 @@ cleanup() {
 
   if kubectl get ns "$NAMESPACE" &>/dev/null 2>&1; then
     log "Deleting Kubernetes namespace '$NAMESPACE' (this drains all pods)..."
-    kubectl delete namespace "$NAMESPACE" --timeout=120s
+    kubectl delete namespace "$NAMESPACE" --timeout=120s --wait=true || true
     ok "Namespace '$NAMESPACE' deleted"
   else
     log "Namespace '$NAMESPACE' not found, skipping"
