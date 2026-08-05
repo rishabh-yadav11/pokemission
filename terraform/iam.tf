@@ -1,13 +1,18 @@
+# TLS certificate data from EKS OIDC issuer - Used for IAM OIDC provider setup
 data "tls_certificate" "eks" {
   url = aws_eks_cluster.main.identity[0].oidc[0].issuer
 }
 
+# IAM OIDC Provider - Enables IAM roles for Kubernetes service accounts (IRSA)
+# Allows pods to assume IAM roles without using node instance profiles
 resource "aws_iam_openid_connect_provider" "eks" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
   url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
 }
 
+# Trust policy document for AWS Load Balancer Controller
+# Allows the controller service account to assume an IAM role
 data "aws_iam_policy_document" "alb_controller_assume" {
   statement {
     effect = "Allow"
@@ -24,12 +29,16 @@ data "aws_iam_policy_document" "alb_controller_assume" {
   }
 }
 
+# IAM role for AWS Load Balancer Controller
+# Uses trust policy above to enable IRSA
 resource "aws_iam_role" "alb_controller" {
   name               = "${local.project}-alb-controller"
   assume_role_policy = data.aws_iam_policy_document.alb_controller_assume.json
   tags               = local.tags
 }
 
+# IAM policy for AWS Load Balancer Controller
+# Comprehensive permissions for creating and managing ALBs, NLBs, and Target Groups
 resource "aws_iam_policy" "alb_controller" {
   name   = "${local.project}-alb-controller-policy"
   policy = jsonencode({
@@ -177,11 +186,14 @@ resource "aws_iam_policy" "alb_controller" {
   })
 }
 
+# Attach ALB controller policy to the role
 resource "aws_iam_role_policy_attachment" "alb_controller" {
   policy_arn = aws_iam_policy.alb_controller.arn
   role       = aws_iam_role.alb_controller.name
 }
 
+# Helm release for AWS Load Balancer Controller
+# Deploys the controller to manage ingress resources (ALBs, NLBs)
 resource "helm_release" "alb_controller" {
   name       = "aws-load-balancer-controller"
   repository = "https://aws.github.io/eks-charts"
@@ -189,6 +201,7 @@ resource "helm_release" "alb_controller" {
   namespace  = "kube-system"
   version    = "1.8.4"
 
+  # Controller configuration
   set {
     name  = "region"
     value = var.aws_region
@@ -199,8 +212,9 @@ resource "helm_release" "alb_controller" {
     value = aws_vpc.main.id
   }
 
+  # Link to IAM role via service account annotation (IRSA)
   set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    name  = "serviceAccount.annotations.eks\\\\.amazonaws\\\\.com/role-arn"
     value = aws_iam_role.alb_controller.arn
   }
 

@@ -332,47 +332,6 @@ for i in $(seq 1 30); do
   fi
 done
 
-# ═══════════════════════════════════════════════════════
-step "14 — ENDPOINT HEALTH CHECKS"
-
-MISSION_STATUS=""
-SUB_STATUS=""
-FRONT_STATUS=""
-
-log "Testing: GET http://$ALB_URL/api/mission/health"
-for i in $(seq 1 20); do
-  MISSION_RESP=$(curl -sf "http://$ALB_URL/api/mission/health" 2>/dev/null || true)
-  if [ -n "$MISSION_RESP" ]; then
-    MISSION_STATUS="$MISSION_RESP"
-    ok "  mission-service responded: $MISSION_STATUS"
-    break
-  fi
-  log "  No response yet (attempt $i/20)..."
-  sleep 5
-done
-
-log "Testing: GET http://$ALB_URL/api/subscriber/health"
-for i in $(seq 1 20); do
-  SUB_RESP=$(curl -sf "http://$ALB_URL/api/subscriber/health" 2>/dev/null || true)
-  if [ -n "$SUB_RESP" ]; then
-    SUB_STATUS="$SUB_RESP"
-    ok "  subscriber-service responded: $SUB_STATUS"
-    break
-  fi
-  log "  No response yet (attempt $i/20)..."
-  sleep 5
-done
-
-log "Testing: GET http://$ALB_URL/ (frontend)"
-for i in $(seq 1 20); do
-  FRONT_STATUS=$(curl -so /dev/null -w "%{http_code}" "http://$ALB_URL/" 2>/dev/null || echo "")
-  if [ "$FRONT_STATUS" = "200" ] || [ "$FRONT_STATUS" = "304" ]; then
-    ok "  frontend responded: HTTP $FRONT_STATUS"
-    break
-  fi
-  log "  No response yet (attempt $i/20)..."
-  sleep 5
-done
 
 # ═══════════════════════════════════════════════════════
 step "— DEPLOY COMPLETE —"

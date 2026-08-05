@@ -1,6 +1,8 @@
+# Terraform configuration and provider version constraints
+# Ensures compatible provider versions are used across the project
 terraform {
   required_version = ">= 1.5"
-
+ 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -25,20 +27,27 @@ terraform {
   }
 }
 
+# AWS provider configuration - main provider for all AWS resources
 provider "aws" {
   region = var.aws_region
 }
 
+# Data source to fetch authentication token for EKS cluster
+# Required by Kubernetes and Helm providers to authenticate with the cluster
 data "aws_eks_cluster_auth" "main" {
   name = aws_eks_cluster.main.name
 }
 
+# Kubernetes provider - enables management of Kubernetes resources
+# Uses EKS cluster endpoint and authentication token for connection
 provider "kubernetes" {
   host                   = aws_eks_cluster.main.endpoint
   cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.main.token
 }
 
+# Helm provider - enables deployment of Helm charts to the EKS cluster
+# Used to deploy AWS Load Balancer Controller and other Kubernetes add-ons
 provider "helm" {
   kubernetes {
     host                   = aws_eks_cluster.main.endpoint
