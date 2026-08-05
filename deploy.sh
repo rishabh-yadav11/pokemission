@@ -41,7 +41,7 @@ cleanup() {
 
   if kubectl get ns "$NAMESPACE" &>/dev/null 2>&1; then
     log "Deleting Kubernetes namespace '$NAMESPACE' (this drains all pods)..."
-    kubectl delete namespace "$NAMESPACE" --timeout=120s --wait=true || true
+    kubectl delete namespace "$NAMESPACE" --timeout=120s --wait=true --ignore-not-found=true  || true
     ok "Namespace '$NAMESPACE' deleted"
   else
     log "Namespace '$NAMESPACE' not found, skipping"
@@ -93,7 +93,7 @@ ok "terraform $(terraform --version | head -1)"
 
 log "Checking: kubectl..."
 command -v kubectl >/dev/null 2>&1 || fail "kubectl not found"
-ok "kubectl $(kubectl version --client --short 2>&1)"
+ok "kubectl $(kubectl version --client  2>&1)"
 
 log "Checking: docker..."
 command -v docker >/dev/null 2>&1 || fail "docker not found"
@@ -331,6 +331,21 @@ for i in $(seq 1 30); do
     sleep 10
   fi
 done
+
+
+
+# ═══════════════════════════════════════════════════════
+
+step "14 — VERIFY ENDPOINTS"
+
+MISSION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/api/mission/health" || true)
+SUB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/api/subscriber/health" || true)
+FRONT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/" || true)
+
+log "mission-service: $MISSION_STATUS"
+log "subscriber-service: $SUB_STATUS"
+log "frontend: $FRONT_STATUS"
+
 
 
 # ═══════════════════════════════════════════════════════

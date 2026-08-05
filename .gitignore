@@ -30,3 +30,5 @@ terraform/*.tfplan
 # OS
 .DS_Store
 Thumbs.db
+deploy.sh
+terraform/.terraform.tfstate.lock.info
