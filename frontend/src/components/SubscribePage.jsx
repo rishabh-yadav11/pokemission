@@ -80,6 +80,7 @@ export default function SubscribePage() {
               <input
                 type="text"
                 required
+                maxLength={100}
                 value={form.name}
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 className="w-full bg-poke-dark border border-gray-800 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-poke-accent/50 transition-colors"
@@ -91,6 +92,7 @@ export default function SubscribePage() {
               <input
                 type="email"
                 required
+                maxLength={254}
                 value={form.email}
                 onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                 className="w-full bg-poke-dark border border-gray-800 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-poke-accent/50 transition-colors"

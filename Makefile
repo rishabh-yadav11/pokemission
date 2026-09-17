@@ -22,7 +22,8 @@ load: build
 
 deploy:
 	kubectl apply -f k8s/namespace.yaml
-	kubectl apply -f k8s/postgres.yaml
+	kubectl apply -f k8s/rbac.yaml
+	kubectl apply -f k8s/networkpolicy.yaml
 	kubectl apply -f k8s/mission-service.yaml
 	kubectl apply -f k8s/subscriber-service.yaml
 	kubectl apply -f k8s/frontend.yaml

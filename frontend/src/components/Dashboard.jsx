@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getPokemon, getGenerations } from '../api'
+import { getPokemon, getGenerations, safeSprite } from '../api'
 
 function TypeBadge({ type }) {
   const colors = {
@@ -96,8 +96,8 @@ export default function Dashboard() {
                       {p.type?.split('/').map(t => <TypeBadge key={t} type={t.trim()} />)}
                     </div>
                   </div>
-                  {p.sprite_url ? (
-                    <img src={p.sprite_url} alt={p.name} className="w-16 h-16 object-contain" />
+                  {safeSprite(p.sprite_url) ? (
+                    <img src={safeSprite(p.sprite_url)} alt={p.name} className="w-16 h-16 object-contain" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   ) : (
                     <span className="text-2xl">⚡</span>
                   )}

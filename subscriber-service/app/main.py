@@ -10,7 +10,19 @@ from app.database import init_db, close_db, async_session
 from app.routes import router
 from app.models import Subscriber, Alert
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+DEFAULT_CORS_ORIGINS = "http://localhost:3000"
+
+
+def _parse_cors_origins() -> list:
+    raw = os.getenv("CORS_ORIGINS") or os.getenv("FRONTEND_URL") or DEFAULT_CORS_ORIGINS
+    raw = raw.strip()
+    if raw == "*" or not raw:
+        return [DEFAULT_CORS_ORIGINS]
+    origins = [o.strip() for o in raw.split(",") if o.strip() and o.strip() != "*"]
+    return origins or [DEFAULT_CORS_ORIGINS]
+
+
+CORS_ORIGINS = _parse_cors_origins()
 
 EVENT_TEMPLATES = {
     "generation": "New generation discovered: {name} on {date}",
@@ -59,7 +71,7 @@ async def check_new_events():
         existing = set(existing_rows.all())
         rows = []
         for gen in generations:
-            link = f"/generations/{gen.id}"
+            link = f"/generations/{g.id}"
             date_str = gen.date_utc.strftime("%Y-%m-%d %H:%M UTC") if gen.date_utc else "TBD"
             for sub in subscribers:
                 if (sub.id, link) not in existing:
@@ -110,10 +122,10 @@ app = FastAPI(title="PokéMission Subscriber Service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS.split(",") if CORS_ORIGINS != "*" else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials="*" not in CORS_ORIGINS,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(router)

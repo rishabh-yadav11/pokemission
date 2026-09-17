@@ -11,7 +11,19 @@ from app.models import Generation
 from app.routes import router
 from app.poke_client import sync_generations, sync_pokemon
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+DEFAULT_CORS_ORIGINS = "http://localhost:3000"
+
+
+def _parse_cors_origins() -> list:
+    raw = os.getenv("CORS_ORIGINS") or os.getenv("FRONTEND_URL") or DEFAULT_CORS_ORIGINS
+    raw = raw.strip()
+    if raw == "*" or not raw:
+        return [DEFAULT_CORS_ORIGINS]
+    origins = [o.strip() for o in raw.split(",") if o.strip() and o.strip() != "*"]
+    return origins or [DEFAULT_CORS_ORIGINS]
+
+
+CORS_ORIGINS = _parse_cors_origins()
 SYNC_INTERVAL_S = int(os.getenv("SYNC_INTERVAL_S", "3600"))
 SYNC_ADVISORY_LOCK_KEY = int(os.getenv("SYNC_LOCK_KEY", "420001"))
 
@@ -69,10 +81,10 @@ app = FastAPI(title="PokéMission Service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS.split(",") if CORS_ORIGINS != "*" else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials="*" not in CORS_ORIGINS,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(router)

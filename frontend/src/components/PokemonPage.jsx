@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { getPokemon } from '../api'
+import { getPokemon, safeSprite } from '../api'
 
 const TYPE_COLORS = {
   normal: '#A8A878', fire: '#F08030', water: '#6890F0', electric: '#F8D030',
@@ -105,11 +105,13 @@ export default function PokemonPage() {
       {selected && (
         <div className="grid md:grid-cols-2 gap-6">
           <div className="rounded-2xl bg-poke-card border border-gray-800/50 p-6">
-            {selected.sprite_url ? (
+            {safeSprite(selected.sprite_url) ? (
               <img
-                src={selected.sprite_url}
+                src={safeSprite(selected.sprite_url)}
                 alt={selected.name}
                 className="w-full h-80 object-contain rounded-xl"
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             ) : (
               <div className="w-full h-80 bg-poke-dark rounded-xl flex items-center justify-center text-6xl">⚡</div>

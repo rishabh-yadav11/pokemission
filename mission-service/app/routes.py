@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import select, desc
+from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -83,8 +83,17 @@ async def get_latest_generation(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/pokemon")
-async def get_pokemon(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Pokemon))
+async def get_pokemon(
+    response: Response,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    # Set cache headers
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'pokemon-{limit}-{offset}'
+
+    result = await db.execute(select(Pokemon).limit(limit).offset(offset))
     all_pokemon = result.scalars().all()
     return [
         {
@@ -125,12 +134,21 @@ async def get_one_pokemon(pokemon_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/types")
-async def get_types(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Pokemon))
-    all_pokemon = result.scalars().all()
+async def get_types(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    # DISTINCT query in SQL instead of loading full rows
+    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["ETag"] = "types-v1"
+
+    result = await db.execute(
+        select(func.distinct(Pokemon.type)).where(Pokemon.type.isnot(None))
+    )
+    types_raw = result.scalars().all()
+
     unique_types = set()
-    for p in all_pokemon:
-        if p.type:
-            for t in p.type.split("/"):
-                unique_types.add(t.strip())
+    for t in types_raw:
+        for part in t.split("/"):
+            unique_types.add(part.strip())
     return [{"name": t} for t in sorted(unique_types)]

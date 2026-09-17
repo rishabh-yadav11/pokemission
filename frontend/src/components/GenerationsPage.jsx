@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getGenerations, getGenerationPokemon } from '../api'
+import { getGenerations, getGenerationPokemon, safeSprite } from '../api'
 
 const TYPE_COLORS = {
   normal: '#A8A878', fire: '#F08030', water: '#6890F0', electric: '#F8D030',
@@ -115,8 +115,10 @@ export default function GenerationsPage() {
                   className="rounded-xl bg-poke-dark border border-gray-800/50 p-3 text-center hover:border-poke-accent/30 transition-all group"
                 >
                   {p.sprite_url ? (
-                    <img src={p.sprite_url} alt={p.name}
-                      className="w-16 h-16 object-contain mx-auto group-hover:scale-110 transition-transform" />
+                    <img src={safeSprite(p.sprite_url)} alt={p.name}
+                      className="w-16 h-16 object-contain mx-auto group-hover:scale-110 transition-transform"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   ) : (
                     <div className="w-16 h-16 mx-auto flex items-center justify-center text-2xl">⚡</div>
                   )}

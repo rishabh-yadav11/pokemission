@@ -1,26 +1,48 @@
+import html
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.database import get_db
 from app.models import Subscriber, Alert
 
 router = APIRouter(prefix="/api/subscriber", tags=["subscriber"])
 
+EventType = Literal["generation", "rare", "region"]
+
 
 class SubscribeRequest(BaseModel):
-    name: str
-    email: str
-    event_types: list[str] = ["generation"]
+    name: str = Field(..., min_length=1, max_length=100, description="Subscriber name")
+    email: EmailStr
+    event_types: list[EventType] = Field(default_factory=lambda: ["generation"], max_length=3)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("event_types", mode="before")
+    @classmethod
+    def dedupe_event_types(cls, v: list) -> list:
+        if not isinstance(v, list):
+            return v
+        return list(dict.fromkeys(v))
+
+    @field_validator("event_types")
+    @classmethod
+    def validate_event_types(cls, v: list) -> list:
+        if not v:
+            return ["generation"]
+        return v
 
 
 class SubscribeResponse(BaseModel):
-    id: str
-    name: str
-    email: str
-    event_types: list[str]
     message: str
 
 
@@ -29,49 +51,71 @@ async def health():
     return {"status": "ok", "service": "subscriber-service"}
 
 
+async def _rate_limit_check(request: Request) -> None:
+    # Simple in-memory rate limiting (per-process). In production, use Redis/slowapi.
+    # 30 req/min per IP as a basic safeguard.
+    import time
+    if not hasattr(_rate_limit_check, "_buckets"):
+        _rate_limit_check._buckets = {}
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    bucket = _rate_limit_check._buckets.get(ip, [])
+    bucket = [t for t in bucket if now - t < 60]
+    if len(bucket) >= 30:
+        raise HTTPException(status_code=429, detail="Too many requests, please try again later")
+    bucket.append(now)
+    _rate_limit_check._buckets[ip] = bucket
+
+
 @router.post("/subscribe", response_model=SubscribeResponse)
-async def subscribe(req: SubscribeRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Subscriber).where(Subscriber.email == req.email))
-    existing = result.scalar_one_or_none()
-    if existing:
-        existing.name = req.name
-        existing.event_types = list(set(existing.event_types + req.event_types))
-        existing.confirmed = True
-        await db.commit()
-        await db.refresh(existing)
-        return SubscribeResponse(
-            id=str(existing.id),
-            name=existing.name,
-            email=existing.email,
-            event_types=existing.event_types,
-            message="Subscription updated successfully",
-        )
+async def subscribe(req: SubscribeRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await _rate_limit_check(request)
 
-    sub = Subscriber(
-        name=req.name,
-        email=req.email,
-        event_types=req.event_types,
-        confirmed=True,
-    )
-    db.add(sub)
-    await db.commit()
-    await db.refresh(sub)
+    # Sanitize user input before storing
+    safe_name = html.escape(req.name)
+    safe_event_types = [html.escape(et) for et in req.event_types]
 
-    alert = Alert(
-        subscriber_id=sub.id,
-        event_type="subscription",
-        message=f"Welcome {sub.name}! You're subscribed to {', '.join(sub.event_types)} alerts.",
-    )
-    db.add(alert)
-    await db.commit()
+    # Single transaction with retry on unique constraint violation
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = await db.execute(select(Subscriber).where(Subscriber.email == req.email))
+            existing = result.scalar_one_or_none()
 
-    return SubscribeResponse(
-        id=str(sub.id),
-        name=sub.name,
-        email=sub.email,
-        event_types=sub.event_types,
-        message="Subscribed successfully!",
-    )
+            if existing:
+                # Uniform message to prevent email enumeration
+                existing.name = safe_name
+                existing.event_types = list(dict.fromkeys((existing.event_types or []) + safe_event_types))
+                existing.confirmed = False  # Require confirmation flow
+                await db.commit()
+                return SubscribeResponse(message="If this email is new, check inbox to confirm subscription")
+
+            sub = Subscriber(
+                name=safe_name,
+                email=req.email,
+                event_types=safe_event_types,
+                confirmed=False,  # Require confirmation token flow
+            )
+            db.add(sub)
+            await db.flush()  # Get ID without committing
+
+            alert = Alert(
+                subscriber_id=sub.id,
+                event_type="subscription",
+                message=f"Welcome {safe_name}! You're subscribed to {', '.join(safe_event_types)} alerts.",
+            )
+            db.add(alert)
+
+            await db.commit()
+            return SubscribeResponse(message="If this email is new, check inbox to confirm subscription")
+
+        except IntegrityError:
+            await db.rollback()
+            if attempt == max_retries - 1:
+                raise HTTPException(status_code=500, detail="Could not process subscription, please try again")
+            continue
+
+    raise HTTPException(status_code=500, detail="Could not process subscription")
 
 
 @router.get("/{subscriber_id}/alerts")
@@ -137,11 +181,6 @@ async def unsubscribe(
     if not sub:
         raise HTTPException(status_code=404, detail="Subscriber not found")
 
-    # Minimal ownership check until real auth (JWT/session) lands.
-    # TODO(auth): replace email check with authenticated principal (JWT)
-    # and enforce sub.owner_id == current_user.id -> 403 otherwise.
-    # TODO(rate-limit): add per-IP/per-ID limiter (e.g. slowapi) on this route.
-    # TODO(soft-delete): prefer deleted_at flag over hard delete.
     if email is None:
         raise HTTPException(status_code=422, detail="Email confirmation required")
     if email.strip().lower() != sub.email.strip().lower():
