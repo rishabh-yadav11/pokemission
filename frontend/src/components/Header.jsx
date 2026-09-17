@@ -16,7 +16,7 @@ export default function Header() {
       <div className="container mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-3 group">
-            <span className="text-3xl group-hover:animate-bounce">⚡</span>
+            <span className="text-3xl group-hover:animate-bounce">[PKMN]</span>
             <div>
               <h1 className="text-lg font-bold text-white tracking-tight">
                 PokéMission

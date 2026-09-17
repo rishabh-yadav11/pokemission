@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('axios', () => {
-  const mockGet = vi.fn()
-  const mockPost = vi.fn()
-  const mockPut = vi.fn()
-  const mockDelete = vi.fn()
+const mockGet = vi.fn()
+const mockPost = vi.fn()
+const mockPut = vi.fn()
+const mockDelete = vi.fn()
 
+vi.mock('axios', () => {
   const mockAxios = {
     create: vi.fn(() => ({
       get: mockGet,
@@ -18,14 +18,12 @@ vi.mock('axios', () => {
 })
 
 describe('API functions', () => {
-  let api
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks()
-    api = await import('../api')
   })
 
-  it('exports all expected functions', () => {
+  it('exports all expected functions', async () => {
+    const api = await import('../api')
     expect(api.getGenerations).toBeDefined()
     expect(api.getGenerationPokemon).toBeDefined()
     expect(api.getLatestGeneration).toBeDefined()
@@ -39,8 +37,7 @@ describe('API functions', () => {
   })
 
   it('getGenerations calls correct endpoint', async () => {
-    const axios = await import('axios')
-    const mockGet = axios.default.create().get
+    const api = await import('../api')
     mockGet.mockResolvedValue({ data: ['gen1', 'gen2'] })
 
     const result = await api.getGenerations()
@@ -49,8 +46,7 @@ describe('API functions', () => {
   })
 
   it('getPokemon calls correct endpoint', async () => {
-    const axios = await import('axios')
-    const mockGet = axios.default.create().get
+    const api = await import('../api')
     mockGet.mockResolvedValue({ data: ['pk1', 'pk2'] })
 
     const result = await api.getPokemon()
@@ -59,8 +55,7 @@ describe('API functions', () => {
   })
 
   it('getGenerationPokemon calls correct endpoint', async () => {
-    const axios = await import('axios')
-    const mockGet = axios.default.create().get
+    const api = await import('../api')
     mockGet.mockResolvedValue({ data: ['poke1'] })
 
     const result = await api.getGenerationPokemon('gen-1')
@@ -69,8 +64,7 @@ describe('API functions', () => {
   })
 
   it('getTypes calls correct endpoint', async () => {
-    const axios = await import('axios')
-    const mockGet = axios.default.create().get
+    const api = await import('../api')
     mockGet.mockResolvedValue({ data: [{ name: 'fire' }] })
 
     const result = await api.getTypes()
@@ -79,8 +73,7 @@ describe('API functions', () => {
   })
 
   it('subscribe posts to correct endpoint', async () => {
-    const axios = await import('axios')
-    const mockPost = axios.default.create().post
+    const api = await import('../api')
     mockPost.mockResolvedValue({ data: { id: 'sub-1' } })
 
     const result = await api.subscribe({ name: 'Ash', email: 'ash@pokemon.com' })
@@ -89,12 +82,11 @@ describe('API functions', () => {
   })
 
   it('unsubscribe calls correct endpoint', async () => {
-    const axios = await import('axios')
-    const mockDelete = axios.default.create().delete
+    const api = await import('../api')
     mockDelete.mockResolvedValue({ data: { status: 'unsubscribed' } })
 
-    const result = await api.unsubscribe('sub-123')
-    expect(mockDelete).toHaveBeenCalledWith('/sub-123')
+    const result = await api.unsubscribe('12345678-1234-4123-8123-123456789012', 'test@example.com')
+    expect(mockDelete).toHaveBeenCalledWith('/12345678-1234-4123-8123-123456789012', { params: { email: 'test@example.com' } })
     expect(result).toEqual({ status: 'unsubscribed' })
   })
 })

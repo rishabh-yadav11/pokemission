@@ -6,6 +6,7 @@ import Dashboard from '../components/Dashboard'
 vi.mock('../api', () => ({
   getPokemon: vi.fn(),
   getGenerations: vi.fn(),
+  safeSprite: vi.fn(() => null),
 }))
 
 import { getPokemon, getGenerations } from '../api'

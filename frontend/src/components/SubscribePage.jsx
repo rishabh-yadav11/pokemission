@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { subscribe, getAlerts, markAlertRead } from '../api'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { subscribe, getAlerts, markAlertRead, unsubscribe } from '../api'
 
 const EVENT_OPTIONS = [
-  { value: 'generation', label: '⚡ New Generation', desc: 'New Pokémon generation discovered' },
-  { value: 'rare', label: '🌟 Rare Find', desc: 'Rare Pokémon sightings' },
-  { value: 'region', label: '🗺️ New Region', desc: 'New region announced' },
+  { value: 'generation', label: 'New Generation', desc: 'New Pokémon generation discovered' },
+  { value: 'rare', label: 'Rare Find', desc: 'Rare Pokémon sightings' },
+  { value: 'region', label: 'New Region', desc: 'New region announced' },
 ]
 
 export default function SubscribePage() {
@@ -14,6 +14,24 @@ export default function SubscribePage() {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [unsubLoading, setUnsubLoading] = useState(false)
+  const [unsubEmail, setUnsubEmail] = useState('')
+  const [showUnsubModal, setShowUnsubModal] = useState(false)
+
+  // Persist subscriberId in localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('pokemission_subscriber_id')
+    if (stored) setSubscriberId(stored)
+  }, [])
+
+  const persistSubscriberId = useCallback((id) => {
+    if (id) {
+      localStorage.setItem('pokemission_subscriber_id', id)
+    } else {
+      localStorage.removeItem('pokemission_subscriber_id')
+    }
+    setSubscriberId(id)
+  }, [])
 
   const toggleEvent = (val) => {
     setForm((prev) => ({
@@ -31,7 +49,7 @@ export default function SubscribePage() {
     setMessage(null)
     try {
       const result = await subscribe(form)
-      setSubscriberId(result.id)
+      persistSubscriberId(result.id)
       setMessage(result.message)
     } catch (err) {
       setError(err.response?.data?.detail || 'Subscription failed')
@@ -40,23 +58,37 @@ export default function SubscribePage() {
     }
   }
 
-  const fetchAlerts = useCallback(async () => {
+  // Polling with visibility guard, backoff, and AbortController
+  const fetchAlerts = useCallback(async (signal, retryDelay = 15000) => {
     if (!subscriberId) return
+    if (signal?.aborted) return
+    if (document.hidden) {
+      // Reschedule when visible again
+      const handleVisibility = () => {
+        if (!document.hidden) {
+          document.removeEventListener('visibilitychange', handleVisibility)
+          fetchAlerts(signal, 0) // immediate fetch when tab becomes visible
+        }
+      }
+      document.addEventListener('visibilitychange', handleVisibility)
+      return
+    }
     try {
       const data = await getAlerts(subscriberId)
-      setAlerts(data)
+      if (!signal?.aborted) setAlerts(data)
     } catch {
       // ignore
+    }
+    if (!signal?.aborted) {
+      setTimeout(() => fetchAlerts(signal, Math.min(retryDelay * 1.5, 120000)), retryDelay)
     }
   }, [subscriberId])
 
   useEffect(() => {
-    fetchAlerts()
-    if (subscriberId) {
-      const interval = setInterval(fetchAlerts, 15000)
-      return () => clearInterval(interval)
-    }
-  }, [subscriberId, fetchAlerts])
+    const controller = new AbortController()
+    fetchAlerts(controller.signal)
+    return () => controller.abort()
+  }, [fetchAlerts])
 
   const handleMarkRead = async (alertId) => {
     try {
@@ -65,6 +97,30 @@ export default function SubscribePage() {
     } catch {
       // ignore
     }
+  }
+
+  const handleUnsubscribe = async (e) => {
+    e.preventDefault()
+    setUnsubLoading(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await unsubscribe(subscriberId, unsubEmail)
+      persistSubscriberId(null)
+      setAlerts([])
+      setShowUnsubModal(false)
+      setUnsubEmail('')
+      setMessage('Successfully unsubscribed')
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unsubscribe failed')
+    } finally {
+      setUnsubLoading(false)
+    }
+  }
+
+  const openUnsubModal = () => {
+    setShowUnsubModal(true)
+    setUnsubEmail('')
   }
 
   return (
@@ -137,6 +193,18 @@ export default function SubscribePage() {
               {error}
             </div>
           )}
+          
+          {subscriberId && (
+            <div className="mt-6 pt-6 border-t border-gray-800/50">
+              <button
+                type="button"
+                onClick={openUnsubModal}
+                className="w-full py-2.5 rounded-lg bg-poke-red/10 text-poke-red font-semibold border border-poke-red/30 hover:bg-poke-red/20 transition-all"
+              >
+                Unsubscribe
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl bg-poke-card border border-gray-800/50 p-6">
@@ -151,14 +219,14 @@ export default function SubscribePage() {
 
           {!subscriberId ? (
             <div className="text-center py-12 text-poke-gray">
-              <div className="text-4xl mb-3">⚡</div>
+              <div className="text-4xl mb-3">[ALERT]</div>
               <p className="text-sm">Subscribe above to get Poké alerts</p>
             </div>
           ) : alerts.length === 0 ? (
             <div className="text-center py-12 text-poke-gray">
-              <div className="text-4xl mb-3">📡</div>
+              <div className="text-4xl mb-3">[RADAR]</div>
               <p className="text-sm">Waiting for new alerts...</p>
-              <p className="text-xs mt-1">Auto-refreshes every 15s</p>
+              <p className="text-xs mt-1">Auto-refreshes with backoff (15s-2m)</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[500px] overflow-y-auto">
@@ -194,6 +262,45 @@ export default function SubscribePage() {
           )}
         </div>
       </div>
+
+      {showUnsubModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-poke-card border border-gray-800 rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">Unsubscribe</h3>
+            <p className="text-poke-gray text-sm mb-4">Enter your email to confirm unsubscription. This will delete your account and all alerts.</p>
+            <form onSubmit={handleUnsubscribe} className="space-y-4">
+              <div>
+                <label className="block text-sm text-poke-gray mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  maxLength={254}
+                  value={unsubEmail}
+                  onChange={(e) => setUnsubEmail(e.target.value)}
+                  className="w-full bg-poke-dark border border-gray-800 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-poke-accent/50"
+                  placeholder="ash@pokemon.com"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowUnsubModal(false); setUnsubEmail(''); }}
+                  className="flex-1 py-2.5 rounded-lg bg-poke-dark text-poke-gray font-semibold border border-gray-800 hover:border-gray-700 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={unsubLoading}
+                  className="flex-1 py-2.5 rounded-lg bg-poke-red/10 text-poke-red font-semibold border border-poke-red/30 hover:bg-poke-red/20 transition-all disabled:opacity-50"
+                >
+                  {unsubLoading ? 'Unsubscribing...' : 'Confirm Unsubscribe'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

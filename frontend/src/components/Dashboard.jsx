@@ -70,13 +70,13 @@ export default function Dashboard() {
               <h4 className="text-2xl font-bold mb-4">{latestGen.name}</h4>
               <p className="text-poke-gray text-sm mb-4">{latestGen.details}</p>
               <div className="flex items-center gap-2 text-poke-gray text-sm">
-                <span>🗺️</span>
+                <span>[MAP]</span>
                 <span>Region: {latestGen.region_name || 'Unknown'}</span>
               </div>
             </div>
             <div className="flex justify-center">
               <div className="w-48 h-48 bg-poke-dark rounded-full flex items-center justify-center border border-gray-800">
-                <span className="text-6xl">⚡</span>
+                <span className="text-6xl">[POWER]</span>
               </div>
             </div>
           </div>
@@ -99,7 +99,7 @@ export default function Dashboard() {
                   {safeSprite(p.sprite_url) ? (
                     <img src={safeSprite(p.sprite_url)} alt={p.name} className="w-16 h-16 object-contain" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   ) : (
-                    <span className="text-2xl">⚡</span>
+                    <span className="text-2xl">[IMG]</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-poke-gray">

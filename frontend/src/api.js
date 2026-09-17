@@ -7,7 +7,7 @@ const missionClient = axios.create({ baseURL: MISSION_API, timeout: 15000 })
 const subscriberClient = axios.create({ baseURL: SUBSCRIBER_API, timeout: 15000 })
 
 // UUID v4 regex for sid validation
-const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}$/i
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function encodePathParam(param) {
   return encodeURIComponent(param)

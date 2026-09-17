@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { getPokemon, safeSprite } from '../api'
 
 const TYPE_COLORS = {
@@ -37,7 +37,9 @@ export default function PokemonPage() {
   const [pokemon, setPokemon] = useState([])
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const debounceRef = useRef(null)
 
   useEffect(() => {
     getPokemon()
@@ -49,15 +51,30 @@ export default function PokemonPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const handleSearchChange = useCallback((e) => {
+    const value = e.target.value.slice(0, 64) // maxLength 64
+    setSearch(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value)
+    }, 200) // 200ms debounce
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return pokemon
-    const q = search.toLowerCase()
+    if (!debouncedSearch.trim()) return pokemon
+    const q = debouncedSearch.toLowerCase()
     return pokemon.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.type?.toLowerCase().includes(q) ||
-      p.id?.toLowerCase().includes(q)
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.type && p.type.toLowerCase().includes(q)) ||
+      (p.id && p.id.toLowerCase().includes(q))
     )
-  }, [pokemon, search])
+  }, [pokemon, debouncedSearch])
 
   if (loading) {
     return (
@@ -78,7 +95,8 @@ export default function PokemonPage() {
           type="text"
           placeholder="Search by name, type, or ID..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={handleSearchChange}
+          maxLength={64}
           className="w-full sm:w-72 bg-poke-card border border-gray-800 rounded-lg px-4 py-2 text-sm text-white placeholder-poke-gray focus:outline-none focus:border-poke-accent/50"
         />
       </div>
@@ -114,7 +132,7 @@ export default function PokemonPage() {
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             ) : (
-              <div className="w-full h-80 bg-poke-dark rounded-xl flex items-center justify-center text-6xl">⚡</div>
+              <div className="w-full h-80 bg-poke-dark rounded-xl flex items-center justify-center text-6xl">[IMG]</div>
             )}
             <h3 className="text-xl font-bold mt-4">{selected.name}</h3>
             <div className="flex gap-1 mt-2 flex-wrap">

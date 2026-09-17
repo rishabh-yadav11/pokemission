@@ -71,7 +71,7 @@ export default function GenerationsPage() {
             }`}
           >
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-2xl">🗺️</span>
+              <span className="text-2xl">[MAP]</span>
               <div>
                 <h3 className="font-semibold text-sm">{gen.name}</h3>
                 <p className="text-[10px] text-poke-gray">
@@ -120,7 +120,7 @@ export default function GenerationsPage() {
                       referrerPolicy="no-referrer"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   ) : (
-                    <div className="w-16 h-16 mx-auto flex items-center justify-center text-2xl">⚡</div>
+                    <div className="w-16 h-16 mx-auto flex items-center justify-center text-2xl">[IMG]</div>
                   )}
                   <p className="text-xs font-medium mt-2 truncate">{p.name}</p>
                   <div className="flex gap-1 justify-center mt-1 flex-wrap">
