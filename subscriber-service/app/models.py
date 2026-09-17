@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -23,6 +23,10 @@ class Subscriber(Base):
 
 class Alert(Base):
     __tablename__ = "alerts"
+    __table_args__ = (
+        UniqueConstraint("subscriber_id", "event_type", "link", name="uq_alert_subscriber_event_link"),
+        Index("ix_alert_subscriber_event", "subscriber_id", "event_type"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     subscriber_id = Column(UUID(as_uuid=True), ForeignKey("subscribers.id", ondelete="CASCADE"), nullable=False)

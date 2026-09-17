@@ -22,36 +22,70 @@ EVENT_TEMPLATES = {
 async def check_new_events():
     async with async_session() as db:
         from sqlalchemy import text
+        # Advisory lock: safe during rolling-update / multi-replica overlap.
+        try:
+            await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('subscriber-check'))"))
+        except Exception:
+            pass
         result = await db.execute(
-            text("SELECT id, name, date_utc, complete FROM generations WHERE complete = true ORDER BY date_utc DESC LIMIT 5")
+            text("SELECT id, name, date_utc FROM generations WHERE complete = true ORDER BY date_utc DESC LIMIT 5")
         )
         generations = result.fetchall()
+        if not generations:
+            return
 
-        result2 = await db.execute(
-            select(Subscriber)
+        # Only subscribers interested in generation events (DB-side filter).
+        try:
+            result2 = await db.execute(
+                select(Subscriber).where(Subscriber.event_types.contains(["generation"]))
+            )
+        except Exception:
+            # Fallback for DBs without JSONB contains (e.g. SQLite tests).
+            result2 = await db.execute(select(Subscriber))
+        subscribers = [s for s in result2.scalars().all() if "generation" in (s.event_types or [])]
+        if not subscribers:
+            return
+
+        links = [f"/generations/{g.id}" for g in generations]
+        sub_ids = [s.id for s in subscribers]
+        # Single batched existence check replaces 5*N per-cell selects.
+        existing_rows = await db.execute(
+            select(Alert.subscriber_id, Alert.link).where(
+                Alert.event_type == "generation",
+                Alert.link.in_(links),
+                Alert.subscriber_id.in_(sub_ids),
+            )
         )
-        subscribers = result2.scalars().all()
-
+        existing = set(existing_rows.all())
+        rows = []
         for gen in generations:
+            link = f"/generations/{gen.id}"
+            date_str = gen.date_utc.strftime("%Y-%m-%d %H:%M UTC") if gen.date_utc else "TBD"
             for sub in subscribers:
-                if "generation" in (sub.event_types or []):
-                    date_str = gen.date_utc.strftime("%Y-%m-%d %H:%M UTC") if gen.date_utc else "TBD"
-                    message = f"New generation discovered: {gen.name} on {date_str}"
-                    existing = await db.execute(
-                        select(Alert).where(
-                            Alert.subscriber_id == sub.id,
-                            Alert.event_type == "generation",
-                            Alert.message == message,
-                        )
-                    )
-                    if not existing.scalar_one_or_none():
-                        db.add(Alert(
-                            subscriber_id=sub.id,
-                            event_type="generation",
-                            message=message,
-                            link=f"/generations/{gen.id}",
-                        ))
-        await db.commit()
+                if (sub.id, link) not in existing:
+                    rows.append({
+                        "subscriber_id": sub.id,
+                        "event_type": "generation",
+                        "message": f"New generation discovered: {gen.name} on {date_str}",
+                        "link": link,
+                    })
+        if not rows:
+            return
+        # Idempotent insert: concurrent workers cannot duplicate (UNIQUE + DO NOTHING).
+        try:
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            await db.execute(
+                pg_insert(Alert).values(rows).on_conflict_do_nothing(
+                    index_elements=["subscriber_id", "event_type", "link"]
+                )
+            )
+            await db.commit()
+        except Exception:
+            # Fallback for non-Postgres (tests): best-effort plain insert.
+            await db.rollback()
+            for row in rows:
+                db.add(Alert(**row))
+            await db.commit()
 
 
 async def background_check():
