@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +38,7 @@ async def get_generations(db: AsyncSession = Depends(get_db)):
 async def get_generation_pokemon(gen_id: str, db: AsyncSession = Depends(get_db)):
     g = await db.get(Generation, gen_id)
     if not g:
-        return {"error": "Generation not found"}
+        raise HTTPException(status_code=404, detail="Generation not found")
     species_names = g.pokemon_species or []
     result = await db.execute(
         select(Pokemon).where(Pokemon.name.in_([s.title() for s in species_names]))
@@ -47,7 +47,7 @@ async def get_generation_pokemon(gen_id: str, db: AsyncSession = Depends(get_db)
     name_map = {p.name.lower(): p for p in matches}
     ordered = []
     for s in species_names:
-        p = name_map.get(s)
+        p = name_map.get(s.lower())
         if p:
             ordered.append({
                 "id": p.id,
@@ -68,7 +68,7 @@ async def get_latest_generation(db: AsyncSession = Depends(get_db)):
     )
     g = result.scalar_one_or_none()
     if not g:
-        return {"error": "No generations found"}
+        raise HTTPException(status_code=404, detail="No generations found")
     return {
         "id": g.id,
         "name": g.name,
@@ -117,7 +117,7 @@ async def get_pokemon(
 async def get_one_pokemon(pokemon_id: str, db: AsyncSession = Depends(get_db)):
     p = await db.get(Pokemon, pokemon_id)
     if not p:
-        return {"error": "Pokémon not found"}
+        raise HTTPException(status_code=404, detail="Pokémon not found")
     return {
         "id": p.id,
         "name": p.name,
@@ -150,5 +150,7 @@ async def get_types(
     unique_types = set()
     for t in types_raw:
         for part in t.split("/"):
-            unique_types.add(part.strip())
+            part = part.strip()
+            if part:
+                unique_types.add(part)
     return [{"name": t} for t in sorted(unique_types)]

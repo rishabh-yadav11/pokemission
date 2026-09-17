@@ -45,8 +45,8 @@ class TestGenerations:
     async def test_get_generation_pokemon_not_found(self, async_client, mock_db):
         mock_db.get.return_value = None
         resp = await async_client.get("/api/mission/generations/gen-999/pokemon")
-        assert resp.status_code == 200
-        assert resp.json() == {"error": "Generation not found"}
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Generation not found"
 
     @pytest.mark.asyncio
     async def test_get_latest_generation_found(self, async_client, mock_db, sample_generation_2):
@@ -61,8 +61,8 @@ class TestGenerations:
     async def test_get_latest_generation_empty(self, async_client, mock_db):
         mock_db.execute.return_value = MockResult([])
         resp = await async_client.get("/api/mission/generations/latest")
-        assert resp.status_code == 200
-        assert resp.json() == {"error": "No generations found"}
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "No generations found"
 
 
 class TestPokemon:
@@ -90,14 +90,15 @@ class TestPokemon:
     async def test_get_one_pokemon_not_found(self, async_client, mock_db):
         mock_db.get.return_value = None
         resp = await async_client.get("/api/mission/pokemon/pk-999")
-        assert resp.status_code == 200
-        assert resp.json() == {"error": "Pokémon not found"}
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Pokémon not found"
 
 
 class TestTypes:
     @pytest.mark.asyncio
-    async def test_get_types(self, async_client, mock_db, sample_pokemon, sample_pokemon_2):
-        mock_db.execute.return_value = MockResult([sample_pokemon, sample_pokemon_2])
+    async def test_get_types(self, async_client, mock_db):
+        # Query returns distinct type strings
+        mock_db.execute.return_value = MockResult(["grass/poison", "electric"])
         resp = await async_client.get("/api/mission/types")
         assert resp.status_code == 200
         types = [t["name"] for t in resp.json()]
