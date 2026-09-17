@@ -126,9 +126,7 @@ ECR_FRONTEND=$(terraform output -raw ecr_frontend_url)
 ECR_MISSION=$(terraform output -raw ecr_mission_service_url)
 ECR_SUBSCRIBER=$(terraform output -raw ecr_subscriber_service_url)
 RDS_ENDPOINT=$(terraform output -raw rds_endpoint)
-KUBECONFIG_CMD=$(terraform output -raw configure_kubectl)
-CREATE_SECRET_CMD=$(terraform output -raw create_db_secret_command)
-ECR_LOGIN_CMD=$(terraform output -raw login_to_ecr_command)
+DB_SECRET_ARN=$(terraform output -raw db_secret_arn)
 
 echo ""
 log "ECR Frontend:          $ECR_FRONTEND"
@@ -143,7 +141,7 @@ cd "$PROJECT_DIR"
 step "3 — KUBECTL CONFIG"
 
 log "Running: aws eks update-kubeconfig --name $CLUSTER_NAME --region $REGION"
-eval "$KUBECONFIG_CMD"
+aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION"
 ok "kubectl configured — context: $(kubectl config current-context)"
 
 log "Checking cluster nodes..."
@@ -155,7 +153,7 @@ ok "$NODE_COUNT node(s) ready"
 step "4 — ECR LOGIN"
 
 log "Running: aws ecr get-login-password | docker login..."
-eval "$ECR_LOGIN_CMD"
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
 ok "Docker authenticated with ECR"
 
 # ═══════════════════════════════════════════════════════
@@ -195,8 +193,10 @@ ok "Namespace '$NAMESPACE' ready"
 # ═══════════════════════════════════════════════════════
 step "7 — DATABASE SECRET"
 
-log "Creating K8s secret 'db-secret' from Terraform-generated credentials..."
-eval "$CREATE_SECRET_CMD" --dry-run=client -o yaml | kubectl apply -f -
+log "Creating K8s secret 'db-secret' from Secrets Manager (no password in outputs/history)..."
+DB_URL=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --query SecretString --output text | python3 -c "import sys,json; print(json.load(sys.stdin)['database_url'])")
+kubectl create secret generic db-secret -n "$NAMESPACE" --from-literal=DATABASE_URL="$DB_URL" --dry-run=client -o yaml | kubectl apply -f -
+unset DB_URL
 ok "Secret 'db-secret' created"
 
 # ═══════════════════════════════════════════════════════
@@ -338,9 +338,12 @@ done
 
 step "14 — VERIFY ENDPOINTS"
 
-MISSION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/api/mission/health" || true)
-SUB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/api/subscriber/health" || true)
-FRONT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/" || true)
+MISSION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${ALB_URL}/api/mission/health" || true)
+SUB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${ALB_URL}/api/subscriber/health" || true)
+FRONT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${ALB_URL}/" || true)
+# HTTP should 301-redirect to HTTPS (ssl-redirect):
+HTTP_REDIRECT=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/" || true)
+log "http-redirect-check: $HTTP_REDIRECT (expect 301)"
 
 log "mission-service: $MISSION_STATUS"
 log "subscriber-service: $SUB_STATUS"
@@ -355,7 +358,7 @@ echo ""
 echo -e "${GREEN}  ╔══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}  ║              PokéMission is live!                        ║${NC}"
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}  ║  URL:      http://${ALB_URL}${NC}"
+echo -e "${GREEN}  ║  URL:      https://${ALB_URL}${NC}"
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}  ║  Endpoints:                                            ║${NC}"
 if [ -n "$MISSION_STATUS" ]; then

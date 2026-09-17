@@ -58,8 +58,12 @@ resource "aws_db_instance" "main" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 
-  skip_final_snapshot = true
-  publicly_accessible = false
+  skip_final_snapshot          = false
+  final_snapshot_identifier    = "${local.project}-db-final-${random_id.secret_suffix.hex}"
+  deletion_protection          = true
+  multi_az                     = true
+  performance_insights_enabled = true
+  publicly_accessible          = false
 
   tags = local.tags
 }

@@ -32,17 +32,34 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_vpc_resource" {
 }
 
 # EKS Cluster - The main Kubernetes control plane
-# Uses version 1.30; configured for public API endpoint access
+# Uses version 1.30; private endpoint + restricted public access + audit logs + KMS
+resource "aws_kms_key" "eks" {
+  description             = "EKS cluster secret encryption"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+  tags                    = local.tags
+}
+
 resource "aws_eks_cluster" "main" {
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster.arn
   version  = "1.30"
 
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks.key_arn
+    }
+    resources = ["secrets"]
+  }
+
   # Network configuration - uses both public and private subnets
   vpc_config {
     subnet_ids              = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
-    endpoint_private_access = false
+    endpoint_private_access = true
     endpoint_public_access  = true
+    public_access_cidrs     = var.eks_public_access_cidrs
   }
 
   tags = local.tags

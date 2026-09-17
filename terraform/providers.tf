@@ -2,7 +2,16 @@
 # Ensures compatible provider versions are used across the project
 terraform {
   required_version = ">= 1.5"
- 
+
+  # Encrypted remote state (critical #7): no local tfstate with secrets.
+  backend "s3" {
+    bucket         = "pokemission-tfstate-<ACCOUNT_ID>"
+    key            = "pokemission/terraform.tfstate"
+    region         = "ap-south-1"
+    dynamodb_table = "pokemission-tfstate-locks"
+    encrypt        = true
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"

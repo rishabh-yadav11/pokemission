@@ -40,19 +40,15 @@ output "db_secret_arn" {
   value       = aws_secretsmanager_secret.db.arn
 }
 
-# Output: Kubernetes secret creation command
-# Run this to create a K8s secret with database URL (marked as sensitive)
-output "create_db_secret_command" {
-  description = "Run this after terraform apply to create the K8s secret"
-  value = "kubectl create secret generic db-secret -n pokemission --from-literal=DATABASE_URL=\"postgresql+asyncpg://${var.db_username}:${random_password.db.result}@${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.db_name}\""
-  sensitive = true
-}
+# NOTE: create_db_secret_command output removed (critical #7).
+# It embedded the DB password in outputs/state/shell history.
+# Use db_secret_arn via Secrets Manager instead (see deploy.sh step 7).
 
 # Output: ECR login command
 # Run this to authenticate Docker with ECR before pushing images
 output "login_to_ecr_command" {
   description = "Run this to authenticate Docker with ECR"
-  value = "aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
+  value       = "aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
 }
 
 # Data source to fetch current AWS account ID for ECR login command

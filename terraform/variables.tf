@@ -27,3 +27,10 @@ variable "db_name" {
   description = "RDS PostgreSQL database name"
   default     = "pokemissiondb"
 }
+
+# EKS public endpoint allowlist - restrict to operator IPs (override via tfvars)
+variable "eks_public_access_cidrs" {
+  description = "CIDR blocks allowed to reach the EKS public endpoint"
+  type        = list(string)
+  default     = ["0.0.0.0/0"] # TODO: restrict to operator IPs, e.g. ["203.0.113.10/32"]
+}

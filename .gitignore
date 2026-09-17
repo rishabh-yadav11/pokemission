@@ -13,6 +13,16 @@ terraform/.terraform/
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/*.tfplan
+# Terraform state anywhere (covers root + subdirs after S3 migration leftover)
+*.tfstate
+*.tfstate.*
+terraform/.terraform.lock.hcl
+# Crash logs / overrides
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
 
 # Docker
 .docker/
@@ -30,5 +40,5 @@ terraform/*.tfplan
 # OS
 .DS_Store
 Thumbs.db
-deploy.sh
 terraform/.terraform.tfstate.lock.info
+# NOTE: deploy.sh must stay tracked (removed from ignore).
