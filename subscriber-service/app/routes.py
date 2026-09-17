@@ -104,6 +104,10 @@ async def get_alerts(subscriber_id: str, db: AsyncSession = Depends(get_db)):
 @router.put("/{subscriber_id}/alerts/{alert_id}/read")
 async def mark_read(subscriber_id: str, alert_id: str, db: AsyncSession = Depends(get_db)):
     try:
+        sid = uuid.UUID(subscriber_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid subscriber ID")
+    try:
         aid = uuid.UUID(alert_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid alert ID")
@@ -111,13 +115,19 @@ async def mark_read(subscriber_id: str, alert_id: str, db: AsyncSession = Depend
     alert = await db.get(Alert, aid)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
+    if alert.subscriber_id != sid:
+        raise HTTPException(status_code=403, detail="Alert does not belong to subscriber")
     alert.read = True
     await db.commit()
     return {"status": "ok"}
 
 
 @router.delete("/{subscriber_id}")
-async def unsubscribe(subscriber_id: str, db: AsyncSession = Depends(get_db)):
+async def unsubscribe(
+    subscriber_id: str,
+    email: str | None = Query(default=None, description="Account email for ownership confirmation"),
+    db: AsyncSession = Depends(get_db),
+):
     try:
         sid = uuid.UUID(subscriber_id)
     except ValueError:
@@ -126,6 +136,16 @@ async def unsubscribe(subscriber_id: str, db: AsyncSession = Depends(get_db)):
     sub = await db.get(Subscriber, sid)
     if not sub:
         raise HTTPException(status_code=404, detail="Subscriber not found")
+
+    # Minimal ownership check until real auth (JWT/session) lands.
+    # TODO(auth): replace email check with authenticated principal (JWT)
+    # and enforce sub.owner_id == current_user.id -> 403 otherwise.
+    # TODO(rate-limit): add per-IP/per-ID limiter (e.g. slowapi) on this route.
+    # TODO(soft-delete): prefer deleted_at flag over hard delete.
+    if email is None:
+        raise HTTPException(status_code=422, detail="Email confirmation required")
+    if email.strip().lower() != sub.email.strip().lower():
+        raise HTTPException(status_code=403, detail="Email does not match subscriber")
 
     await db.delete(sub)
     await db.commit()

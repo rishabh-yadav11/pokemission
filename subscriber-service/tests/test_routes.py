@@ -125,6 +125,23 @@ class TestMarkRead:
         assert mock_db.commit.called
 
     @pytest.mark.asyncio
+    async def test_mark_read_cross_tenant_403(self, async_client, mock_db, sample_alert):
+        mock_db.get.return_value = sample_alert
+        other_sid = uuid4()
+        assert other_sid != sample_alert.subscriber_id
+        resp = await async_client.put(f"/api/subscriber/{other_sid}/alerts/{sample_alert.id}/read")
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Alert does not belong to subscriber"
+
+    @pytest.mark.asyncio
+    async def test_mark_read_invalid_subscriber_id_400(self, async_client):
+        from uuid import uuid4 as _uuid4
+        aid = _uuid4()
+        resp = await async_client.put(f"/api/subscriber/not-a-uuid/alerts/{aid}/read")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Invalid subscriber ID"
+
+    @pytest.mark.asyncio
     async def test_mark_read_not_found(self, async_client, mock_db):
         mock_db.get.return_value = None
         sid = uuid4()
@@ -148,11 +165,25 @@ class TestUnsubscribe:
         mock_db.get.return_value = sample_subscriber
         sid = sample_subscriber.id
 
-        resp = await async_client.delete(f"/api/subscriber/{sid}")
+        resp = await async_client.delete(f"/api/subscriber/{sid}", params={"email": sample_subscriber.email})
         assert resp.status_code == 200
         assert resp.json() == {"status": "unsubscribed"}
         assert mock_db.delete.called
         assert mock_db.commit.called
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_requires_email(self, async_client, mock_db, sample_subscriber):
+        mock_db.get.return_value = sample_subscriber
+        resp = await async_client.delete(f"/api/subscriber/{sample_subscriber.id}")
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_wrong_email_403(self, async_client, mock_db, sample_subscriber):
+        mock_db.get.return_value = sample_subscriber
+        resp = await async_client.delete(
+            f"/api/subscriber/{sample_subscriber.id}", params={"email": "attacker@evil.com"}
+        )
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_unsubscribe_not_found(self, async_client, mock_db):
